@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
+use std::ops::{Add, AddAssign};
 use std::time::SystemTime;
-use std::ops::Add;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Choice {
@@ -53,7 +53,7 @@ impl Player {
         Self { name: name.into() }
     }
 
-    pub fn make_choice(&self, choice: Choice) -> Participation {
+    pub fn pick(&self, choice: Choice) -> Participation {
         Participation {
             choice,
             player: self.clone(),
@@ -73,10 +73,7 @@ impl Add for Participation {
     type Output = Round;
 
     fn add(self, rhs: Self) -> Self::Output {
-        Round {
-            player_one: self,
-            player_two: rhs,
-        }
+        Round::new(self, rhs)
     }
 }
 
@@ -84,37 +81,62 @@ impl Add for Participation {
 pub struct Round {
     pub player_one: Participation,
     pub player_two: Participation,
+    pub outcome: Outcome,
 }
 
 impl Round {
+    pub fn new(player_one: Participation, player_two: Participation) -> Self {
+        let outcome = match player_one.choice.cmp(&player_two.choice) {
+            Ordering::Equal => Outcome::Draw,
+            Ordering::Less => Outcome::Winner(player_two.player.clone()),
+            Ordering::Greater => Outcome::Winner(player_two.player.clone()),
+        };
+
+        Self {
+            player_one,
+            player_two,
+            outcome,
+        }
+    }
+
     pub fn started_at(&self) -> SystemTime {
-        std::cmp::min(
-            self.player_one.picked_at,
-            self.player_two.picked_at,
-        )
+        std::cmp::min(self.player_one.picked_at, self.player_two.picked_at)
     }
 
     pub fn finisehd_at(&self) -> SystemTime {
-        std::cmp::max(
-            self.player_one.picked_at,
-            self.player_two.picked_at,
-        )
+        std::cmp::max(self.player_one.picked_at, self.player_two.picked_at)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Game {
+    pub rounds: Vec<Round>,
+}
+
+impl Game {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            rounds: Vec::with_capacity(capacity),
+        }
     }
 
-    pub fn outcome(&self) -> Outcome {
-        match self.player_two.choice.cmp(&self.player_one.choice) {
-            Ordering::Equal => Outcome::Draw,
-            Ordering::Less => Outcome::Winner(self.player_one.player.clone()),
-            Ordering::Greater => Outcome::Winner(self.player_two.player.clone()),
-        }
+    pub fn add_round(&mut self, round: Round) {
+        self.rounds.push(round);
+    }
+}
+
+impl AddAssign<Round> for Game {
+    fn add_assign(&mut self, rhs: Round) {
+        self.add_round(rhs);
     }
 }
 
 fn main() {
     let player_one = Player::new("John");
     let player_two = Player::new("Jeff");
-    let round = player_one.make_choice(Choice::Rock) + player_two.make_choice(Choice::Scisors);
+    let mut game = Game::default();
 
-    println!("{round:#?}");
-    println!("{:?}", round.outcome());
+    game += player_one.pick(Choice::Rock) + player_two.pick(Choice::Scisors);
+
+    println!("{game:#?}");
 }
